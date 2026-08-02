@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XGBoost Predictive Optimal Cache Simulator</title>
+
+    <!-- Google Fonts & Chart.js -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --accent-green: #10b981;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --accent-amber: #f59e0b;
+            --accent-blue: #3b82f6;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: radial-gradient(circle at top left, #1e1b4b, #0f172a 50%, #020617);
+            color: var(--text-main);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        header {
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.25rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #a7f3d0, #34d399, #60a5fa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        header p {
+            color: var(--text-muted);
+            font-size: 1.05rem;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 1.5rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+
+        .card h2 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* Controls Form */
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border-color);
+            background: rgba(15, 23, 42, 0.6);
+            color: var(--text-main);
+            font-family: inherit;
+            font-size: 0.95rem;
+            transition: all 0.2s;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.25);
+        }
+
+        .btn-primary {
+            width: 100%;
+            padding: 0.85rem;
+            border: none;
+            border-radius: 0.5rem;
+            background: linear-gradient(135deg, var(--accent-green), #059669);
+            color: #ffffff;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4);
+        }
+
+        .btn-primary:hover {
+            opacity: 0.95;
+            transform: translateY(-1px);
+        }
+
+        /* Metric Highlights */
+        .metrics-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .metric-box {
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            text-align: center;
+        }
+
+        .metric-title {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-value {
+            font-size: 1.7rem;
+            font-weight: 700;
+        }
+
+        .metric-value.emerald { color: var(--accent-green); }
+        .metric-value.purple { color: var(--accent-purple); }
+        .metric-value.cyan { color: var(--accent-cyan); }
+        .metric-value.amber { color: var(--accent-amber); }
+        .metric-value.blue { color: var(--accent-blue); }
+
+        /* Charts Grid */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        @media (max-width: 900px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .chart-container {
+            position: relative;
+            height: 320px;
+        }
+
+        /* History Log Table */
+        .table-responsive {
+            overflow-x: auto;
+            max-height: 400px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+            text-align: left;
+        }
+
+        th {
+            background: rgba(15, 23, 42, 0.8);
+            padding: 0.75rem 1rem;
+            color: var(--text-muted);
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+
+        td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.6rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-hit {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--accent-green);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .badge-miss {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--accent-amber);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 0.8s ease-in-out infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>XGBoost Predictive Optimal Cache Simulator</h1>
+        <p>Bridging Belady's Theoretical Optimal Algorithm with Machine Learning Access Prediction</p>
+    </header>
+
+    <div class="dashboard-grid">
+        <!-- Sidebar Controls -->
+        <aside class="card">
+            <h2>⚙️ Simulation Setup</h2>
+            <form id="simForm">
+                <div class="form-group">
+                    <label for="patternSelect">Access Workload Pattern</label>
+                    <select id="patternSelect" class="form-control">
+                        <option value="zipf">Zipfian Popularity (20/80 Rule)</option>
+                        <option value="temporal">Temporal Locality Pattern</option>
+                        <option value="api_endpoints">REST API Endpoint Calls</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="cacheSizeInput">Cache Capacity (Slots)</label>
+                    <input type="number" id="cacheSizeInput" class="form-control" value="10" min="2" max="100">
+                </div>
+
+                <div class="form-group">
+                    <label for="traceLengthInput">Trace Request Sequence Length</label>
+                    <input type="number" id="traceLengthInput" class="form-control" value="500" min="50" max="5000">
+                </div>
+
+                <div class="form-group">
+                    <label for="customSeqInput">Custom Sequence (Optional, comma-separated)</label>
+                    <input type="text" id="customSeqInput" class="form-control" placeholder="1, 5, 2, 1, 8, 5, 1, 2...">
+                </div>
+
+                <button type="submit" class="btn-primary" id="btnSubmit">
+                    <span id="btnText">Run Cache Benchmark</span>
+                    <div class="spinner" id="btnSpinner"></div>
+                </button>
+            </form>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main>
+            <!-- Highlight Cards -->
+            <div class="metrics-row">
+                <div class="metric-box">
+                    <div class="metric-title">Belady Proximity</div>
+                    <div class="metric-value emerald" id="valProximity">-- %</div>
+                    <small style="color:var(--text-muted); font-size:0.75rem;">ML vs Theoretical Limit</small>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-title">XGBoost Hit Ratio</div>
+                    <div class="metric-value cyan" id="valXgbRatio">-- %</div>
+                    <small style="color:var(--text-muted); font-size:0.75rem;">Predictive Optimal</small>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-title">LRU Hit Ratio</div>
+                    <div class="metric-value amber" id="valLruRatio">-- %</div>
+                    <small style="color:var(--text-muted); font-size:0.75rem;">Recency Baseline</small>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-title">LFU Hit Ratio</div>
+                    <div class="metric-value blue" id="valLfuRatio">-- %</div>
+                    <small style="color:var(--text-muted); font-size:0.75rem;">Frequency Baseline</small>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-title">Belady Max Ratio</div>
+                    <div class="metric-value purple" id="valBeladyRatio">-- %</div>
+                    <small style="color:var(--text-muted); font-size:0.75rem;">Oracle Upper Bound</small>
+                </div>
+            </div>
+
+            <!-- Charts Section -->
+            <div class="charts-grid">
+                <div class="card">
+                    <h2>📊 Cache Hit Ratio Comparison</h2>
+                    <div class="chart-container">
+                        <canvas id="hitRatioChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>🧠 XGBoost Feature Importance</h2>
+                    <div class="chart-container">
+                        <canvas id="importanceChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Execution Trace Log -->
+            <div class="card">
+                <h2>🔍 Step-by-Step Predictive Eviction Log</h2>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Step</th>
+                                <th>Requested Resource</th>
+                                <th>Result</th>
+                                <th>Evicted Item</th>
+                                <th>Current Cache State</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody">
+                            <tr>
+                                <td colspan="5" style="text-align: center; color: var(--text-muted);">
+                                    Run simulation to view live step-by-step eviction logs.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let hitRatioChartInstance = null;
+        let importanceChartInstance = null;
+
+        document.getElementById('simForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const btnText = document.getElementById('btnText');
+            const btnSpinner = document.getElementById('btnSpinner');
+            btnText.style.display = 'none';
+            btnSpinner.style.display = 'block';
+
+            const payload = {
+                pattern: document.getElementById('patternSelect').value,
+                cache_size: document.getElementById('cacheSizeInput').value,
+                trace_length: document.getElementById('traceLengthInput').value,
+                custom_sequence: document.getElementById('customSeqInput').value.trim() || null
+            };
+
+            try {
+                const response = await fetch('/api/simulate/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    renderResults(data.results);
+                } else {
+                    alert('Error running simulation: ' + data.error);
+                }
+            } catch (err) {
+                alert('Request failed: ' + err.message);
+            } finally {
+                btnText.style.display = 'inline';
+                btnSpinner.style.display = 'none';
+            }
+        });
+
+        function renderResults(res) {
+            const comp = res.comparison;
+            const resFind = res.research_findings;
+
+            // Update Metrics Cards
+            document.getElementById('valProximity').innerText = resFind.belady_proximity_percentage + '%';
+            document.getElementById('valXgbRatio').innerText = (comp.XGBoost_Predictive.hit_ratio * 100).toFixed(1) + '%';
+            document.getElementById('valLruRatio').innerText = (comp.LRU.hit_ratio * 100).toFixed(1) + '%';
+            document.getElementById('valLfuRatio').innerText = (comp.LFU.hit_ratio * 100).toFixed(1) + '%';
+            document.getElementById('valBeladyRatio').innerText = (comp.Belady_Optimal.hit_ratio * 100).toFixed(1) + '%';
+
+            // 1. Render Hit Ratio Chart
+            const ctxHit = document.getElementById('hitRatioChart').getContext('2d');
+            if (hitRatioChartInstance) hitRatioChartInstance.destroy();
+
+            hitRatioChartInstance = new Chart(ctxHit, {
+                type: 'bar',
+                data: {
+                    labels: ['LRU', 'LFU', 'XGBoost Predictive', "Belady's Optimal"],
+                    datasets: [{
+                        label: 'Hit Ratio (%)',
+                        data: [
+                            (comp.LRU.hit_ratio * 100).toFixed(1),
+                            (comp.LFU.hit_ratio * 100).toFixed(1),
+                            (comp.XGBoost_Predictive.hit_ratio * 100).toFixed(1),
+                            (comp.Belady_Optimal.hit_ratio * 100).toFixed(1)
+                        ],
+                        backgroundColor: ['#f59e0b', '#3b82f6', '#06b6d4', '#8b5cf6'],
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: 'rgba(255,255,255,0.05)' }
+                        },
+                        x: { ticks: { color: '#94a3b8' } }
+                    }
+                }
+            });
+
+            // 2. Render Feature Importance Chart
+            const featImp = resFind.feature_importance;
+            const featLabels = Object.keys(featImp);
+            const featValues = Object.values(featImp);
+
+            const ctxImp = document.getElementById('importanceChart').getContext('2d');
+            if (importanceChartInstance) importanceChartInstance.destroy();
+
+            importanceChartInstance = new Chart(ctxImp, {
+                type: 'bar',
+                data: {
+                    labels: featLabels,
+                    datasets: [{
+                        label: 'Importance Score',
+                        data: featValues,
+                        backgroundColor: '#10b981',
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                        y: { ticks: { color: '#94a3b8' } }
+                    }
+                }
+            });
+
+            // 3. Render Execution History Log Table
+            const tbody = document.getElementById('historyTableBody');
+            tbody.innerHTML = '';
+
+            const hist = res.detailed_histories.xgboost;
+            hist.forEach(row => {
+                const tr = document.createElement('tr');
+                const badgeClass = row.action === 'HIT' ? 'badge-hit' : 'badge-miss';
+                const evictedStr = row.evicted ? `<span style="color:#f59e0b">${row.evicted}</span>` : '-';
+                const cacheStr = row.cache ? row.cache.join(', ') : '';
+
+                tr.innerHTML = `
+                    <td>#${row.step}</td>
+                    <td><strong>${row.page}</strong></td>
+                    <td><span class="badge ${badgeClass}">${row.action}</span></td>
+                    <td>${evictedStr}</td>
+                    <td style="color:#94a3b8;">[${cacheStr}]</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Auto run on load
+        window.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('simForm').dispatchEvent(new Event('submit'));
+        });
+    </script>
+</body>
+</html>
