@@ -98,3 +98,70 @@ class CacheSimulatorRunner:
                 "belady": res_opt["history"][:50],
             },
         }
+
+from ml_engine.dataset_generator import DatasetGenerator
+from ml_engine.feature_extractor import FeatureExtractor
+from ml_engine.xgboost_model import XGBoostCacheModel
+from ml_engine.predictive_optimal import MLPredictiveOptimalCache
+from cache_engine.lru import LRUCache
+from cache_engine.optimal import OptimalCache
+
+
+def train_model(cache_size, train_seed, length=1000, num_items=30, alpha=1.2):
+    """Train ONLY on a trace the model will never be evaluated on."""
+    train_seq = DatasetGenerator.generate_zipf_trace(
+        length=length, num_items=num_items, alpha=alpha, seed=train_seed
+    )
+    fe = FeatureExtractor()
+    X, y = fe.build_dataset_from_trace(train_seq)  # labels use only train_seq's own future
+
+    model = XGBoostCacheModel(n_estimators=80, max_depth=5, learning_rate=0.1)
+    train_metrics = model.train(X, y)
+    return model, fe, train_metrics
+
+
+def evaluate_on_held_out_traces(model, fe, cache_size, test_seeds,
+                                 length=1000, num_items=30, alpha=1.2):
+    """Frozen model, evaluated on traces it never trained on. Report mean +/- spread."""
+    results = []
+    for seed in test_seeds:
+        test_seq = DatasetGenerator.generate_zipf_trace(
+            length=length, num_items=num_items, alpha=alpha, seed=seed
+        )
+        ml_cache = MLPredictiveOptimalCache(cache_size, model, fe)
+        res_ml = ml_cache.simulate(test_seq)
+
+        opt = OptimalCache(cache_size)
+        res_opt = opt.simulate(test_seq)
+
+        lru = LRUCache(cache_size)
+        res_lru = lru.simulate(test_seq)
+
+        proximity = (res_ml["hit_ratio"] / res_opt["hit_ratio"] * 100
+                     if res_opt["hit_ratio"] > 0 else 0.0)
+
+        results.append({
+            "seed": seed,
+            "ml_hit_ratio": res_ml["hit_ratio"],
+            "belady_hit_ratio": res_opt["hit_ratio"],
+            "lru_hit_ratio": res_lru["hit_ratio"],
+            "belady_proximity_pct": round(proximity, 2),
+        })
+    return results
+
+
+if __name__ == "__main__":
+    model, fe, train_metrics = train_model(cache_size=8, train_seed=42)
+    print("TRAIN metrics (do not report as generalization):", train_metrics)
+
+    held_out = evaluate_on_held_out_traces(
+        model, fe, cache_size=8, test_seeds=[101, 202, 303, 404, 505]
+    )
+    proximities = [r["belady_proximity_pct"] for r in held_out]
+    mean_p = sum(proximities) / len(proximities)
+    spread = max(proximities) - min(proximities)
+
+    print("\nHELD-OUT results (5 unseen seeds, same distribution shape):")
+    for r in held_out:
+        print(r)
+    print(f"\nMean Belady proximity: {mean_p:.2f}%  |  spread: {spread:.2f} pts")
